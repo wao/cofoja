@@ -26,7 +26,8 @@ import java.util.List;
  *
  * @author nhat.minh.le@huoc.org (Nhat Minh Lê)
  */
-public abstract class ContractAssertionError extends AssertionError {
+//public abstract class ContractAssertionError extends AssertionError {
+public abstract class ContractAssertionError extends RuntimeException {
   /**
    * Constructs a new ContractAssertionError.
    *
