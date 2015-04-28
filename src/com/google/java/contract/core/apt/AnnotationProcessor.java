@@ -67,7 +67,8 @@ import javax.tools.JavaFileObject.Kind;
   AnnotationProcessor.OPT_CLASSPATH,
   AnnotationProcessor.OPT_CLASSOUTPUT,
   AnnotationProcessor.OPT_DEPSPATH,
-  AnnotationProcessor.OPT_EXPERIMENTAL
+  AnnotationProcessor.OPT_EXPERIMENTAL,
+  AnnotationProcessor.OPT_DRYRUN
 })
 public class AnnotationProcessor extends AbstractProcessor {
   /**
@@ -110,6 +111,8 @@ public class AnnotationProcessor extends AbstractProcessor {
    */
   protected static final String OPT_DEPSPATH = "com.google.java.contract.depspath";
 
+  protected static final String OPT_DRYRUN = "com.google.java.contract.dryrun";
+
   /**
    * This option enables experimental Contracts for Java features. <em>These
    * features may or may not be included in future releases, or
@@ -126,6 +129,7 @@ public class AnnotationProcessor extends AbstractProcessor {
 
   protected boolean debug;
   protected boolean dump;
+  protected boolean dryrun;
 
   private Class<?> javacProcessingEnvironmentClass;
   private Method getContextMethod;
@@ -186,8 +190,12 @@ public class AnnotationProcessor extends AbstractProcessor {
   public synchronized void init(ProcessingEnvironment processingEnv) {
     super.init(processingEnv);
 
+    dryrun = false;
+    debug = false;
+
     Map<String, String> options = processingEnv.getOptions();
     debug = options.containsKey(OPT_DEBUG);
+    dryrun = options.containsKey(OPT_DRYRUN);
     dump = options.containsKey(OPT_DUMP);
     String dumpDir = options.get(OPT_DUMP);
     if (dumpDir != null) {
@@ -214,83 +222,86 @@ public class AnnotationProcessor extends AbstractProcessor {
       return false;
     }
 
-    DiagnosticManager diagnosticManager = new DiagnosticManager();
+    if(!dryrun){
 
-    List<TypeModel> types = createTypes(rootElements, diagnosticManager);
-    boolean success = diagnosticManager.getErrorCount() == 0;
+        DiagnosticManager diagnosticManager = new DiagnosticManager();
 
-    ArrayList<SyntheticJavaFile> sources =
-        new ArrayList<SyntheticJavaFile>(types.size());
-    if (success) {
-      for (TypeModel type : types) {
-        ContractWriter writer = new ContractWriter(debug);
-        type.accept(writer);
-        sources.add(new SyntheticJavaFile(type.getName().getBinaryName(),
-                                          writer.toByteArray(),
-                                          writer.getLineNumberMap()));
-      }
+        List<TypeModel> types = createTypes(rootElements, diagnosticManager);
+        boolean success = diagnosticManager.getErrorCount() == 0;
 
-      if (dump) {
-        dumpSources(types, sources);
-      }
+        ArrayList<SyntheticJavaFile> sources =
+            new ArrayList<SyntheticJavaFile>(types.size());
+        if (success) {
+            for (TypeModel type : types) {
+                ContractWriter writer = new ContractWriter(debug);
+                type.accept(writer);
+                sources.add(new SyntheticJavaFile(type.getName().getBinaryName(),
+                            writer.toByteArray(),
+                            writer.getLineNumberMap()));
+            }
 
-      try {
-        ContractJavaCompiler compiler =
-            new ContractJavaCompiler(sourcePath, classPath, outputDirectory);
-        CompilationTask task = compiler.getTask(sources, diagnosticManager);
-        success = task.call();
-      } catch (IOException e) {
-        throw new RuntimeException(e);
-      }
+            if (dump) {
+                dumpSources(types, sources);
+            }
+
+            try {
+                ContractJavaCompiler compiler =
+                    new ContractJavaCompiler(sourcePath, classPath, outputDirectory);
+                CompilationTask task = compiler.getTask(sources, diagnosticManager);
+                success = task.call();
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+        }
+
+        if (!success || diagnosticManager.getCount() != 0) {
+            for (DiagnosticManager.Report r : diagnosticManager) {
+                printDiagnostic(r);
+            }
+        }
     }
 
-    if (!success || diagnosticManager.getCount() != 0) {
-      for (DiagnosticManager.Report r : diagnosticManager) {
-        printDiagnostic(r);
-      }
-    }
-
-    return true;
+    return false;
   }
 
   /**
    * Sets class and output paths from command-line options.
    */
   private void setupPaths() {
-    sourcePath = processingEnv.getOptions().get(OPT_SOURCEPATH);
-    classPath = processingEnv.getOptions().get(OPT_CLASSPATH);
-    outputDirectory = processingEnv.getOptions().get(OPT_CLASSOUTPUT);
+      sourcePath = processingEnv.getOptions().get(OPT_SOURCEPATH);
+      classPath = processingEnv.getOptions().get(OPT_CLASSPATH);
+      outputDirectory = processingEnv.getOptions().get(OPT_CLASSOUTPUT);
 
-    /*
-     * Load classes in com.sun.tools reflectively for graceful fallback when
-     * the OpenJDK javac isn't available (e.g. with J9, or ecj).
-     */
-    Object options = getJavacOptions();
-    if (options == null) {
-      return;
-    }
-
-    if (sourcePath == null) {
-      sourcePath = getJavacOption(options, "-sourcepath");
-    }
-
-    if (classPath == null) {
-      String classPath1 = getJavacOption(options, "-cp");
-      String classPath2 = getJavacOption(options, "-classpath");
-      if (classPath1 != null) {
-        if (classPath2 != null) {
-          classPath = classPath1 + File.pathSeparator + classPath2;
-        } else {
-          classPath = classPath1;
-        }
-      } else {
-        classPath = classPath2;
+      /*
+       * Load classes in com.sun.tools reflectively for graceful fallback when
+       * the OpenJDK javac isn't available (e.g. with J9, or ecj).
+       */
+      Object options = getJavacOptions();
+      if (options == null) {
+          return;
       }
-    }
 
-    if (outputDirectory == null) {
-      outputDirectory = getJavacOption(options, "-d");
-    }
+      if (sourcePath == null) {
+          sourcePath = getJavacOption(options, "-sourcepath");
+      }
+
+      if (classPath == null) {
+          String classPath1 = getJavacOption(options, "-cp");
+          String classPath2 = getJavacOption(options, "-classpath");
+          if (classPath1 != null) {
+              if (classPath2 != null) {
+                  classPath = classPath1 + File.pathSeparator + classPath2;
+              } else {
+                  classPath = classPath1;
+              }
+          } else {
+              classPath = classPath2;
+          }
+      }
+
+      if (outputDirectory == null) {
+          outputDirectory = getJavacOption(options, "-d");
+      }
   }
 
   /**
@@ -298,15 +309,15 @@ public class AnnotationProcessor extends AbstractProcessor {
    * available.
    */
   @Requires("r != null")
-  protected void printDiagnostic(DiagnosticManager.Report r) {
-    Messager messager = processingEnv.getMessager();
-    if (r.getElement() == null) {
-      messager.printMessage(r.getKind(), r.getMessage(null));
-    } else {
-      messager.printMessage(r.getKind(), r.getMessage(null), r.getElement(),
-                            r.getAnnotationMirror(), r.getAnnotationValue());
-    }
-  }
+      protected void printDiagnostic(DiagnosticManager.Report r) {
+          Messager messager = processingEnv.getMessager();
+          if (r.getElement() == null) {
+              messager.printMessage(r.getKind(), r.getMessage(null));
+          } else {
+              messager.printMessage(r.getKind(), r.getMessage(null), r.getElement(),
+                      r.getAnnotationMirror(), r.getAnnotationValue());
+          }
+      }
 
   /**
    * Dumps the computed Java source files in the dump directory of
