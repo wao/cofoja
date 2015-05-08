@@ -14,5 +14,6 @@
   <dependencies>
     <dependency org="org.ow2.asm" name="asm-all" rev="5.+" conf="*->default" />
     <dependency org="junit" name="junit-dep" rev="[3.8,)" conf="test->default" />
+    <dependency org="info.thinkmore.android" name="cofoja-api" rev="[1.2,)" conf="*->default" />
   </dependencies>
 </ivy-module>

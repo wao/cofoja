@@ -47,6 +47,7 @@
   <path id="base.class.path">
     <fileset dir="${lib.dir}">
       <include name="asm-*.jar" />
+      <include name="cofoja-api*.jar" />
     </fileset>
   </path>
 

@@ -68,7 +68,7 @@ import javax.tools.JavaFileObject.Kind;
   AnnotationProcessor.OPT_CLASSOUTPUT,
   AnnotationProcessor.OPT_DEPSPATH,
   AnnotationProcessor.OPT_EXPERIMENTAL,
-  AnnotationProcessor.OPT_DRYRUN
+  AnnotationProcessor.OPT_REALWORK
 })
 public class AnnotationProcessor extends AbstractProcessor {
   /**
@@ -111,7 +111,7 @@ public class AnnotationProcessor extends AbstractProcessor {
    */
   protected static final String OPT_DEPSPATH = "com.google.java.contract.depspath";
 
-  protected static final String OPT_DRYRUN = "com.google.java.contract.dryrun";
+  protected static final String OPT_REALWORK = "com.google.java.contract.realwork";
 
   /**
    * This option enables experimental Contracts for Java features. <em>These
@@ -190,12 +190,12 @@ public class AnnotationProcessor extends AbstractProcessor {
   public synchronized void init(ProcessingEnvironment processingEnv) {
     super.init(processingEnv);
 
-    dryrun = false;
+    dryrun = true;
     debug = false;
 
     Map<String, String> options = processingEnv.getOptions();
     debug = options.containsKey(OPT_DEBUG);
-    dryrun = options.containsKey(OPT_DRYRUN);
+    dryrun = !options.containsKey(OPT_REALWORK);
     dump = options.containsKey(OPT_DUMP);
     String dumpDir = options.get(OPT_DUMP);
     if (dumpDir != null) {
